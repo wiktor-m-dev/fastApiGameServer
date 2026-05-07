@@ -32,6 +32,16 @@ The Fast API Game Server is a multiplayer RPG (Role-Playing Game) backend applic
 - **Stat Progression** - Winners can upgrade one of two stats (Defense or Attack)
 - **Probability-Based Outcomes** - Players with better stats have higher chances of winning
 
-## Architecture
-
-### System Components
+### Database structure
+```
+CREATE TABLE `users` (
+  `user_id` INT AUTO_INCREMENT PRIMARY KEY,
+  `username` VARCHAR(50) UNIQUE NOT NULL,
+  `password` VARCHAR(255) NOT NULL,
+  `character_name` VARCHAR(50) DEFAULT NULL,
+  `level` INT DEFAULT 1,
+  `attack` INT DEFAULT 10,
+  `defense` INT DEFAULT 10,
+  `health` INT DEFAULT 100
+)
+```
