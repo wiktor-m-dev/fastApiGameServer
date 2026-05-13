@@ -1,6 +1,5 @@
 import mysql.connector
 from mysql.connector import Error
-from typing import Optional, Dict, Any, Tuple
 import os
 from dotenv import load_dotenv
 import bcrypt
@@ -14,6 +13,7 @@ class DatabaseConnection:
         self.password = os.getenv("DB_PASSWORD", "")
         self.database = os.getenv("DB_NAME", "game_server")
         self.connection = None
+        self.connect()
 
     def connect(self):
         try:
@@ -23,202 +23,141 @@ class DatabaseConnection:
                 password=self.password,
                 database=self.database
             )
-            print("Database connection successful")
-            return self.connection
+            print("Database connected")
+        except Error as e:
+            print(f"Error: {e}")
+
+    def query(self, sql, params=None):
+        cursor = None
+        try:
+            if not self.connection:
+                print("Database not connected")
+                return None
+            cursor = self.connection.cursor(dictionary=True, buffered=True)
+            if params:
+                cursor.execute(sql, params)
+            else:
+                cursor.execute(sql)
+            if "SELECT" in sql.upper():
+                return cursor.fetchall()
+            else:
+                self.connection.commit()
+                return cursor.lastrowid
         except Error as e:
             print(f"Error: {e}")
             return None
-
-    def disconnect(self):
-        if self.connection and self.connection.is_connected():
-            self.connection.close()
-            print("Database connection closed")
-
-    def execute_query(self, query: str, params: tuple = None) -> Optional[list]:
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            self.connection.commit()
-            return cursor.fetchall()
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
         finally:
-            cursor.close()
+            if cursor:
+                cursor.close()
 
-    def hash_password(self, password: str) -> str:
-        """Hash a password using bcrypt"""
-        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-    def verify_password(self, password: str, hashed: str) -> bool:
-        """Verify a password against its hash"""
-        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
-
-    def user_exists(self, username: str) -> bool:
-        """Check if a user exists by username"""
+    def fetch_one(self, sql, params=None):
+        cursor = None
         try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("SELECT user_id FROM users WHERE username = %s", (username,))
-            result = cursor.fetchone()
-            cursor.close()
-            return result is not None
-        except Error as e:
-            print(f"Query error: {e}")
-            return False
-
-    def create_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
-        """Create a new user with hashed password"""
-        try:
-            # Check if user already exists
-            if self.user_exists(username):
+            if not self.connection:
+                print("Database not connected")
                 return None
-            
-            # Hash the password
-            hashed_password = self.hash_password(password)
-            
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute(
-                "INSERT INTO users (username, password) VALUES (%s, %s)",
-                (username, hashed_password)
-            )
-            self.connection.commit()
-            
-            # Get the newly created user
-            user_id = cursor.lastrowid
-            cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
-            user = cursor.fetchone()
-            cursor.close()
-            
-            return user
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
-
-    def authenticate_user(self, username: str, password: str) -> Optional[Dict[str, Any]]:
-        """Authenticate a user by username and password"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-            user = cursor.fetchone()
-            cursor.close()
-            
-            if user and self.verify_password(password, user['password']):
-                return user
-            return None
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
-
-    def get_user(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Get user by user_id"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM users WHERE user_id = %s", (user_id,))
-            user = cursor.fetchone()
-            cursor.close()
-            return user
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
-
-    def fetch_one(self, query: str, params: tuple = None) -> Optional[Dict]:
-        try:
-            cursor = self.connection.cursor(dictionary=True)
+            cursor = self.connection.cursor(dictionary=True, buffered=True)
             if params:
-                cursor.execute(query, params)
+                cursor.execute(sql, params)
             else:
-                cursor.execute(query)
+                cursor.execute(sql)
             result = cursor.fetchone()
             return result
         except Error as e:
-            print(f"Query error: {e}")
+            print(f"Error: {e}")
             return None
         finally:
-            cursor.close()
+            if cursor:
+                cursor.close()
 
-    # Match-related methods
-    def create_match(self, player1_id: int, player2_id: int) -> Optional[Dict[str, Any]]:
-        """Create a new match between two players"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute(
-                "INSERT INTO matches (player1_id, player2_id, status) VALUES (%s, %s, 'in_progress')",
-                (player1_id, player2_id)
-            )
-            self.connection.commit()
-            
-            match_id = cursor.lastrowid
-            cursor.execute("SELECT * FROM matches WHERE match_id = %s", (match_id,))
-            match = cursor.fetchone()
-            cursor.close()
-            
-            return match
-        except Error as e:
-            print(f"Query error: {e}")
+    def hash_password(self, password):
+        return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def verify_password(self, password, hashed):
+        return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+
+    def user_exists(self, username):
+        result = self.fetch_one("SELECT user_id FROM users WHERE username = %s", (username,))
+        return result is not None
+
+    def create_user(self, username, password):
+        if self.user_exists(username):
             return None
+        hashed = self.hash_password(password)
+        self.query("INSERT INTO users (username, password) VALUES (%s, %s)", (username, hashed))
+        return self.fetch_one("SELECT * FROM users WHERE username = %s", (username,))
 
-    def find_opponent_for_match(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Find an opponent for a match (searches for players in queue)"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            # Get first player in queue who isn't the current user
-            cursor.execute(
-                "SELECT * FROM users WHERE user_id != %s ORDER BY level ASC, user_id ASC LIMIT 1",
-                (user_id,)
-            )
-            opponent = cursor.fetchone()
-            cursor.close()
-            return opponent
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
+    def authenticate_user(self, username, password):
+        user = self.fetch_one("SELECT * FROM users WHERE username = %s", (username,))
+        if user and self.verify_password(password, user['password']):
+            return user
+        return None
 
-    def get_match(self, match_id: int) -> Optional[Dict[str, Any]]:
-        """Get match details by match ID"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute("SELECT * FROM matches WHERE match_id = %s", (match_id,))
-            match = cursor.fetchone()
-            cursor.close()
-            return match
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
+    def get_user(self, user_id):
+        return self.fetch_one("SELECT * FROM users WHERE user_id = %s", (user_id,))
 
-    def update_match_status(self, match_id: int, status: str) -> bool:
-        """Update match status"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute(
-                "UPDATE matches SET status = %s WHERE match_id = %s",
-                (status, match_id)
-            )
-            self.connection.commit()
-            cursor.close()
-            return True
-        except Error as e:
-            print(f"Query error: {e}")
-            return False
+    # Queue management
+    def add_to_queue(self, user_id):
+        """Add user to matchmaking queue if not already in one"""
+        existing = self.fetch_one("SELECT queue_id FROM queue WHERE user_id = %s", (user_id,))
+        if existing:
+            return existing
+        self.query("INSERT INTO queue (user_id) VALUES (%s)", (user_id,))
+        return self.fetch_one("SELECT * FROM queue WHERE user_id = %s ORDER BY queue_id DESC LIMIT 1", (user_id,))
 
-    def get_match_history(self, user_id: int, limit: int = 10) -> Optional[list]:
-        """Get match history for a user"""
-        try:
-            cursor = self.connection.cursor(dictionary=True)
-            cursor.execute(
-                """SELECT * FROM matches 
-                   WHERE player1_id = %s OR player2_id = %s 
-                   ORDER BY created_at DESC LIMIT %s""",
-                (user_id, user_id, limit)
-            )
-            matches = cursor.fetchall()
-            cursor.close()
-            return matches
-        except Error as e:
-            print(f"Query error: {e}")
-            return None
+    def remove_from_queue(self, user_id):
+        """Remove user from queue"""
+        return self.query("DELETE FROM queue WHERE user_id = %s", (user_id,))
 
-# Global database instance
+    def find_opponent_in_queue(self, user_id):
+        """Find another user in queue (not the current user) - returns oldest queued user"""
+        result = self.fetch_one(
+            "SELECT u.* FROM users u JOIN queue q ON u.user_id = q.user_id WHERE u.user_id != %s AND u.user_id IS NOT NULL ORDER BY q.queue_id ASC LIMIT 1",
+            (user_id,)
+        )
+        # Verify the user still exists and is in queue
+        if result:
+            queue_check = self.fetch_one("SELECT queue_id FROM queue WHERE user_id = %s", (result['user_id'],))
+            if queue_check:
+                return result
+        return None
+
+    def get_queue_status(self, user_id):
+        """Get current queue status for user"""
+        return self.fetch_one("SELECT * FROM queue WHERE user_id = %s", (user_id,))
+
+    # Match management
+    def create_match(self, player1_id, player2_id):
+        """Create a new match and return match details"""
+        self.query("INSERT INTO matches (player1_id, player2_id, status) VALUES (%s, %s, 'active')", (player1_id, player2_id))
+        return self.fetch_one(
+            "SELECT * FROM matches WHERE player1_id = %s AND player2_id = %s ORDER BY match_id DESC LIMIT 1",
+            (player1_id, player2_id)
+        )
+
+    def get_match(self, match_id):
+        return self.fetch_one("SELECT * FROM matches WHERE match_id = %s", (match_id,))
+
+    def get_active_match(self, user_id):
+        """Get active match for user"""
+        return self.fetch_one(
+            "SELECT * FROM matches WHERE (player1_id = %s OR player2_id = %s) AND status = 'active' LIMIT 1",
+            (user_id, user_id)
+        )
+
+    def end_match(self, match_id, winner_id):
+        """End a match and record winner"""
+        self.query("UPDATE matches SET status = 'ended', winner_id = %s WHERE match_id = %s", (winner_id, match_id))
+        return self.get_match(match_id)
+
+    def get_match_history(self, user_id):
+        return self.query(
+            "SELECT m.*, u1.username as player1_username, u2.username as player2_username FROM matches m "
+            "JOIN users u1 ON m.player1_id = u1.user_id "
+            "JOIN users u2 ON m.player2_id = u2.user_id "
+            "WHERE (m.player1_id = %s OR m.player2_id = %s) AND m.status = 'ended' "
+            "ORDER BY m.created_at DESC LIMIT 10",
+            (user_id, user_id)
+        )
+
 db = DatabaseConnection()
