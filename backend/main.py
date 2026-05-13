@@ -1,11 +1,14 @@
-from fastapi import FastAPI, status
+from fastapi import FastAPI, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
 
-from .schemas import HealthCheckResponse, ErrorResponse, ErrorSeverity
+from .schemas import (
+    HealthCheckResponse, ErrorResponse, ErrorSeverity,
+    RegisterRequest, LoginRequest, AuthResponse, UserResponse
+)
 from .database import DatabaseConnection
 
 # Load environment variables
@@ -103,6 +106,80 @@ async def root():
         "docs": "/docs",
         "health": "/health"
     }
+
+
+# Authentication Endpoints
+@app.post(
+    "/register",
+    response_model=AuthResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Authentication"]
+)
+async def register(request: RegisterRequest) -> AuthResponse:
+    """
+    Register a new user account.
+    
+    Args:
+        request: RegisterRequest containing username and password
+        
+    Returns:
+        AuthResponse: Registration status with user ID and username
+    """
+    # Check if user already exists
+    if db.user_exists(request.username):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username already exists"
+        )
+    
+    # Create new user
+    user = db.create_user(request.username, request.password)
+    
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create user"
+        )
+    
+    return AuthResponse(
+        status="success",
+        message="User registered successfully",
+        user_id=user['user_id'],
+        username=user['username']
+    )
+
+
+@app.post(
+    "/login",
+    response_model=AuthResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Authentication"]
+)
+async def login(request: LoginRequest) -> AuthResponse:
+    """
+    Authenticate a user with username and password.
+    
+    Args:
+        request: LoginRequest containing username and password
+        
+    Returns:
+        AuthResponse: Login status with user ID and username
+    """
+    # Authenticate user
+    user = db.authenticate_user(request.username, request.password)
+    
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password"
+        )
+    
+    return AuthResponse(
+        status="success",
+        message="Login successful",
+        user_id=user['user_id'],
+        username=user['username']
+    )
 
 
 if __name__ == "__main__":

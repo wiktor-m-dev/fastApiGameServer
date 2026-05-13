@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Any
 from enum import Enum
 
@@ -61,5 +61,83 @@ class HealthCheckResponse(BaseModel):
                 "message": "Server is running properly",
                 "version": "1.0.0",
                 "database_connected": True
+            }
+        }
+
+
+# Authentication Schemas
+class RegisterRequest(BaseModel):
+    """User registration request"""
+    username: str = Field(..., min_length=3, max_length=50, description="Username for the account")
+    password: str = Field(..., min_length=6, description="Password (minimum 6 characters)")
+    
+    @field_validator('username')
+    @classmethod
+    def username_alphanumeric(cls, v):
+        if not v.isalnum():
+            raise ValueError('Username must be alphanumeric')
+        return v
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "player123",
+                "password": "secure_password"
+            }
+        }
+
+
+class LoginRequest(BaseModel):
+    """User login request"""
+    username: str = Field(..., description="Username")
+    password: str = Field(..., description="Password")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "username": "player123",
+                "password": "secure_password"
+            }
+        }
+
+
+class AuthResponse(BaseModel):
+    """Authentication response with user data"""
+    status: str = Field(..., description="Response status")
+    message: str = Field(..., description="Response message")
+    user_id: Optional[int] = Field(default=None, description="User ID")
+    username: Optional[str] = Field(default=None, description="Username")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "message": "User registered successfully",
+                "user_id": 1,
+                "username": "player123"
+            }
+        }
+
+
+class UserResponse(BaseModel):
+    """User data response"""
+    user_id: int = Field(..., description="User ID")
+    username: str = Field(..., description="Username")
+    character_name: Optional[str] = Field(default=None, description="Character name")
+    level: int = Field(default=1, description="Character level")
+    attack: int = Field(default=10, description="Attack stat")
+    defense: int = Field(default=10, description="Defense stat")
+    health: int = Field(default=100, description="Health stat")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 1,
+                "username": "player123",
+                "character_name": "Hero",
+                "level": 1,
+                "attack": 10,
+                "defense": 10,
+                "health": 100
             }
         }
