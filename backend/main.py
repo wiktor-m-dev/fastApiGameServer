@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 
 from .schemas import (
     HealthCheckResponse, ErrorResponse, ErrorSeverity,
-    RegisterRequest, LoginRequest, AuthResponse, UserResponse
+    RegisterRequest, LoginRequest, AuthResponse, UserResponse,
+    MatchRequest, MatchResponse, MatchStatus, MatchHistoryEntry
 )
 from .database import DatabaseConnection
 
@@ -179,6 +180,136 @@ async def login(request: LoginRequest) -> AuthResponse:
         message="Login successful",
         user_id=user['user_id'],
         username=user['username']
+    )
+
+
+# Match Endpoints
+@app.post(
+    "/match",
+    response_model=MatchResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["Match"]
+)
+async def find_match(request: MatchRequest) -> MatchResponse:
+    """
+    Find or start a match for a player.
+    
+    Args:
+        request: MatchRequest containing user_id
+        
+    Returns:
+        MatchResponse: Match status with opponent information
+    """
+    # Verify user exists
+    user = db.get_user(request.user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Find an opponent
+    opponent = db.find_opponent_for_match(request.user_id)
+    if opponent is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No opponents available at the moment"
+        )
+    
+    # Create a new match
+    match = db.create_match(request.user_id, opponent['user_id'])
+    if match is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create match"
+        )
+    
+    # Return match response with opponent info
+    return MatchResponse(
+        status="success",
+        message="Match found successfully",
+        match_id=match.get('match_id'),
+        match_status=MatchStatus.IN_PROGRESS,
+        opponent={
+            "user_id": opponent['user_id'],
+            "username": opponent['username'],
+            "character_name": opponent.get('character_name'),
+            "level": opponent.get('level', 1),
+            "attack": opponent.get('attack', 10),
+            "defense": opponent.get('defense', 10),
+            "health": opponent.get('health', 100)
+        }
+    )
+
+
+@app.get(
+    "/match/history/{user_id}",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    tags=["Match"]
+)
+async def get_match_history(user_id: int) -> dict:
+    """
+    Get match history for a user.
+    
+    Args:
+        user_id: The user ID to get history for
+        
+    Returns:
+        dict: Match history with list of past matches
+    """
+    # Verify user exists
+    user = db.get_user(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Get match history
+    history = db.get_match_history(user_id)
+    if history is None:
+        history = []
+    
+    return {
+        "status": "success",
+        "message": "Match history retrieved successfully",
+        "total_matches": len(history),
+        "matches": history
+    }
+
+
+@app.get(
+    "/user/{user_id}",
+    response_model=UserResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["User"]
+)
+async def get_user(user_id: int) -> UserResponse:
+    """
+    Get user profile and character information.
+    
+    Args:
+        user_id: The user ID to retrieve
+        
+    Returns:
+        UserResponse: User profile with character stats
+    """
+    user = db.get_user(user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    return UserResponse(
+        user_id=user['user_id'],
+        username=user['username'],
+        character_name=user.get('character_name'),
+        level=user.get('level', 1),
+        attack=user.get('attack', 10),
+        defense=user.get('defense', 10),
+        health=user.get('health', 100)
     )
 
 
