@@ -141,3 +141,97 @@ class UserResponse(BaseModel):
                 "health": 100
             }
         }
+
+
+# Match Schemas
+class MatchStatus(str, Enum):
+    """Match status states"""
+    SEARCHING = "searching"
+    FOUND = "found"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class OpponentInfo(BaseModel):
+    """Opponent player information"""
+    user_id: int = Field(..., description="Opponent user ID")
+    username: str = Field(..., description="Opponent username")
+    character_name: Optional[str] = Field(default=None, description="Opponent character name")
+    level: int = Field(default=1, description="Opponent level")
+    attack: int = Field(default=10, description="Opponent attack stat")
+    defense: int = Field(default=10, description="Opponent defense stat")
+    health: int = Field(default=100, description="Opponent health stat")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 2,
+                "username": "opponent",
+                "character_name": "Warrior",
+                "level": 5,
+                "attack": 15,
+                "defense": 12,
+                "health": 120
+            }
+        }
+
+
+class MatchRequest(BaseModel):
+    """Request to find or start a match"""
+    user_id: int = Field(..., description="User ID requesting match")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "user_id": 1
+            }
+        }
+
+
+class MatchResponse(BaseModel):
+    """Match response with opponent information"""
+    status: str = Field(..., description="Response status")
+    message: str = Field(..., description="Response message")
+    match_id: Optional[int] = Field(default=None, description="Match ID")
+    match_status: Optional[MatchStatus] = Field(default=None, description="Current match status")
+    opponent: Optional[OpponentInfo] = Field(default=None, description="Opponent information")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "success",
+                "message": "Match found",
+                "match_id": 1,
+                "match_status": "found",
+                "opponent": {
+                    "user_id": 2,
+                    "username": "opponent",
+                    "character_name": "Warrior",
+                    "level": 5,
+                    "attack": 15,
+                    "defense": 12,
+                    "health": 120
+                }
+            }
+        }
+
+
+class MatchHistoryEntry(BaseModel):
+    """Match history entry"""
+    match_id: int = Field(..., description="Match ID")
+    opponent_username: str = Field(..., description="Opponent username")
+    opponent_level: int = Field(..., description="Opponent level")
+    result: str = Field(..., description="Match result: win, loss, or draw")
+    created_at: str = Field(..., description="Match creation timestamp")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "match_id": 1,
+                "opponent_username": "opponent",
+                "opponent_level": 5,
+                "result": "win",
+                "created_at": "2026-05-13T10:00:00Z"
+            }
+        }

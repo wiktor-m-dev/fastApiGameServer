@@ -139,5 +139,86 @@ class DatabaseConnection:
         finally:
             cursor.close()
 
+    # Match-related methods
+    def create_match(self, player1_id: int, player2_id: int) -> Optional[Dict[str, Any]]:
+        """Create a new match between two players"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute(
+                "INSERT INTO matches (player1_id, player2_id, status) VALUES (%s, %s, 'in_progress')",
+                (player1_id, player2_id)
+            )
+            self.connection.commit()
+            
+            match_id = cursor.lastrowid
+            cursor.execute("SELECT * FROM matches WHERE match_id = %s", (match_id,))
+            match = cursor.fetchone()
+            cursor.close()
+            
+            return match
+        except Error as e:
+            print(f"Query error: {e}")
+            return None
+
+    def find_opponent_for_match(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Find an opponent for a match (searches for players in queue)"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            # Get first player in queue who isn't the current user
+            cursor.execute(
+                "SELECT * FROM users WHERE user_id != %s ORDER BY level ASC, user_id ASC LIMIT 1",
+                (user_id,)
+            )
+            opponent = cursor.fetchone()
+            cursor.close()
+            return opponent
+        except Error as e:
+            print(f"Query error: {e}")
+            return None
+
+    def get_match(self, match_id: int) -> Optional[Dict[str, Any]]:
+        """Get match details by match ID"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM matches WHERE match_id = %s", (match_id,))
+            match = cursor.fetchone()
+            cursor.close()
+            return match
+        except Error as e:
+            print(f"Query error: {e}")
+            return None
+
+    def update_match_status(self, match_id: int, status: str) -> bool:
+        """Update match status"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute(
+                "UPDATE matches SET status = %s WHERE match_id = %s",
+                (status, match_id)
+            )
+            self.connection.commit()
+            cursor.close()
+            return True
+        except Error as e:
+            print(f"Query error: {e}")
+            return False
+
+    def get_match_history(self, user_id: int, limit: int = 10) -> Optional[list]:
+        """Get match history for a user"""
+        try:
+            cursor = self.connection.cursor(dictionary=True)
+            cursor.execute(
+                """SELECT * FROM matches 
+                   WHERE player1_id = %s OR player2_id = %s 
+                   ORDER BY created_at DESC LIMIT %s""",
+                (user_id, user_id, limit)
+            )
+            matches = cursor.fetchall()
+            cursor.close()
+            return matches
+        except Error as e:
+            print(f"Query error: {e}")
+            return None
+
 # Global database instance
 db = DatabaseConnection()
